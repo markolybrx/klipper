@@ -14,7 +14,6 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
 
   async function handleSignup() {
     if (!email || !password || !username) {
@@ -37,7 +36,6 @@ export default function SignupPage() {
       password,
       options: {
         data: { username },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
     if (signUpError) {
@@ -45,22 +43,8 @@ export default function SignupPage() {
       setLoading(false);
       return;
     }
-    setConfirmed(true);
-  }
-
-  if (confirmed) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.card}>
-          <div className={styles.wordmark}>KLIPPER</div>
-          <p className={styles.subtitle}>Check your email</p>
-          <p className={styles.body}>
-            We sent a confirmation link to <strong>{email}</strong>. Click it
-            to activate your account and sign in.
-          </p>
-        </div>
-      </div>
-    );
+    router.push("/dashboard");
+    router.refresh();
   }
 
   return (
