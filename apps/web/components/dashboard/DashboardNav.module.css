@@ -1,0 +1,51 @@
+.nav {
+  height: 48px;
+  background-color: #0d0d0d;
+  border-bottom: 1px solid #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.wordmark {
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: #00e5ff;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.identity {
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.6875rem;
+  color: #444444;
+  letter-spacing: 0.05em;
+}
+
+.signOut {
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #555555;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.signOut:hover {
+  color: #00e5ff;
+}
