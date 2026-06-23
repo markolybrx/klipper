@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import styles from "./process.module.css";
 
 type Layout = "9:16" | "16:9" | "1:1";
-type Duration = 15 | 30 | 60 | 300 | 600;
+type Duration = 30 | 60 | 90 | 300 | 600;
 
 const LAYOUTS: { value: Layout; label: string; hint: string }[] = [
   { value: "9:16", label: "Portrait", hint: "TikTok, Reels, Shorts" },
@@ -14,9 +14,9 @@ const LAYOUTS: { value: Layout; label: string; hint: string }[] = [
 ];
 
 const DURATIONS: { value: Duration; label: string }[] = [
-  { value: 15, label: "15 seconds" },
   { value: 30, label: "30 seconds" },
-  { value: 60, label: "1 minute" },
+  { value: 60, label: "60 seconds" },
+  { value: 90, label: "90 seconds" },
   { value: 300, label: "5 minutes" },
   { value: 600, label: "10 minutes" },
 ];
