@@ -55,7 +55,6 @@ export default function LandingPage() {
 
     setLoading(true);
 
-    // Generate session ID in browser — all temp storage keyed to this
     const sessionId = crypto.randomUUID();
 
     if (mode === "url") {
@@ -66,7 +65,6 @@ export default function LandingPage() {
       return;
     }
 
-    // File upload — POST to /api/ingest
     const formData = new FormData();
     formData.append("file", file!);
     formData.append("sessionId", sessionId);
@@ -93,18 +91,21 @@ export default function LandingPage() {
   return (
     <main className={styles.main}>
       <header className={styles.header}>
-        <span className={styles.wordmark}>KLIPPER</span>
-        <span className={styles.tagline}>AI video clipper — no account needed</span>
+        <span className={styles.wordmark}>Klipper</span>
+        <nav className={styles.nav}>
+          <span className={styles.navItem}>No account needed</span>
+        </nav>
       </header>
 
       <section className={styles.hero}>
+        <div className={styles.badge}>AI-powered</div>
         <h1 className={styles.heroTitle}>
-          Drop a video.<br />Get 5 clips.
+          Turn any video into<br />5 ready-to-post clips.
         </h1>
         <p className={styles.heroSubtitle}>
-          Paste any public video URL or upload a file. Klipper's AI analyzes the
-          content and generates up to 5 highlight clips — formatted for TikTok,
-          Reels, Shorts, or landscape. No account. No watermark. No friction.
+          Paste a public URL or upload a file. Klipper finds your best moments,
+          cuts them for TikTok, Reels, or Shorts, and hands them back in seconds.
+          No account. No watermark.
         </p>
       </section>
 
@@ -112,15 +113,15 @@ export default function LandingPage() {
         <div className={styles.modeTabs}>
           <button
             className={`${styles.modeTab} ${mode === "url" ? styles.modeTabActive : ""}`}
-            onClick={() => { setMode("url"); setError(null); }}
+            onClick={() => { setMode("url"); setError(null); setFile(null); }}
           >
-            Paste URL
+            Paste a URL
           </button>
           <button
             className={`${styles.modeTab} ${mode === "file" ? styles.modeTabActive : ""}`}
-            onClick={() => { setMode("file"); setError(null); }}
+            onClick={() => { setMode("file"); setError(null); setUrl(""); }}
           >
-            Upload File
+            Upload a file
           </button>
         </div>
 
@@ -134,6 +135,7 @@ export default function LandingPage() {
               onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleContinue()}
               disabled={loading}
+              autoFocus
             />
           </div>
         )}
@@ -164,59 +166,96 @@ export default function LandingPage() {
             />
             {file ? (
               <div className={styles.fileSelected}>
-                <span className={styles.fileIcon}>[v]</span>
-                <span className={styles.fileName}>{file.name}</span>
-                <span className={styles.fileSize}>
-                  {(file.size / 1024 / 1024).toFixed(1)} MB
-                </span>
+                <div className={styles.fileIcon}>
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M4 4h8l4 4v8H4V4z" stroke="#e8500a" strokeWidth="1.5" fill="none"/>
+                    <path d="M12 4v4h4" stroke="#e8500a" strokeWidth="1.5"/>
+                  </svg>
+                </div>
+                <div className={styles.fileInfo}>
+                  <span className={styles.fileName}>{file.name}</span>
+                  <span className={styles.fileSize}>{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+                </div>
+                <button
+                  className={styles.fileRemove}
+                  onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                >
+                  Remove
+                </button>
               </div>
             ) : (
               <div className={styles.dropPrompt}>
-                <span className={styles.dropIcon}>[+]</span>
-                <span className={styles.dropText}>
-                  Drag a video here or tap to browse
-                </span>
+                <div className={styles.dropIconWrap}>
+                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <path d="M14 4v14M8 12l6-8 6 8" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M4 22h20" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <span className={styles.dropText}>Drag a video here or click to browse</span>
                 <span className={styles.dropHint}>MP4, MOV, WEBM, AVI — max 200MB</span>
               </div>
             )}
           </div>
         )}
 
-        {error && <div className={styles.error}>{error}</div>}
+        {error && (
+          <div className={styles.error}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{flexShrink:0, marginTop:"1px"}}>
+              <circle cx="7" cy="7" r="6" stroke="#dc2626" strokeWidth="1.5"/>
+              <path d="M7 4v4M7 10v.5" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            {error}
+          </div>
+        )}
 
         <button
           className={styles.continueBtn}
           onClick={handleContinue}
           disabled={loading}
         >
-          {loading ? "Uploading..." : "Continue ->"}
+          {loading ? (
+            <span className={styles.loadingRow}>
+              <svg className={styles.spinner} width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10"/>
+              </svg>
+              Uploading...
+            </span>
+          ) : (
+            "Continue"
+          )}
         </button>
+
+        <p className={styles.inputNote}>
+          Sessions are temporary — close the tab and everything is cleared.
+        </p>
       </section>
 
       <section className={styles.features}>
         <div className={styles.feature}>
-          <span className={styles.featureGlyph}>[AI]</span>
-          <p className={styles.featureText}>
-            Gemini analyzes transcript and pacing to find your best moments
+          <div className={styles.featureNum}>01</div>
+          <h3 className={styles.featureTitle}>AI finds your hooks</h3>
+          <p className={styles.featureDesc}>
+            Gemini reads the transcript and pacing to surface your most
+            watchable moments — ranked by hook score.
           </p>
         </div>
         <div className={styles.feature}>
-          <span className={styles.featureGlyph}>[05]</span>
-          <p className={styles.featureText}>
-            Up to 5 clip options per video — ranked by hook score
+          <div className={styles.featureNum}>02</div>
+          <h3 className={styles.featureTitle}>You pick the format</h3>
+          <p className={styles.featureDesc}>
+            Choose your clip duration and layout — portrait for TikTok and
+            Reels, landscape for YouTube, square for everything else.
           </p>
         </div>
         <div className={styles.feature}>
-          <span className={styles.featureGlyph}>[DL]</span>
-          <p className={styles.featureText}>
-            Download individually or all at once — ready for any platform
+          <div className={styles.featureNum}>03</div>
+          <h3 className={styles.featureTitle}>Download and post</h3>
+          <p className={styles.featureDesc}>
+            Get up to 5 clips back, preview each one, and download
+            individually or as a zip. Ready to upload anywhere.
           </p>
         </div>
       </section>
-
-      <footer className={styles.footer}>
-        <span>Sessions are temporary. Close the tab and the clips are gone.</span>
-      </footer>
     </main>
   );
 }
