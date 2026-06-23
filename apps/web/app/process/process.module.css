@@ -28,9 +28,7 @@
   transition: color 0.15s;
 }
 
-.startOver:hover {
-  color: #1a1a1a;
-}
+.startOver:hover { color: #1a1a1a; }
 
 .checking {
   padding: 4rem 0;
@@ -72,14 +70,101 @@
   text-align: right;
 }
 
+.progressSection {
+  background-color: #ffffff;
+  border: 1px solid #e5e5e3;
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+.progressHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.875rem;
+}
+
+.progressStage {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.progressPct {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #e8500a;
+  font-variant-numeric: tabular-nums;
+}
+
+.progressTrack {
+  width: 100%;
+  height: 6px;
+  background-color: #f3f4f6;
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+}
+
+.progressFill {
+  height: 100%;
+  background-color: #e8500a;
+  transition: width 0.4s ease;
+}
+
+.progressNote {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+.errorSection {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.errorIcon { flex-shrink: 0; margin-top: 1px; }
+
+.errorBody { flex: 1; }
+
+.errorTitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #991b1b;
+  margin-bottom: 0.25rem;
+}
+
+.errorMsg {
+  font-size: 0.8125rem;
+  color: #dc2626;
+  line-height: 1.5;
+}
+
+.retryBtn {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #dc2626;
+  border: 1.5px solid #dc2626;
+  padding: 0.5rem 1rem;
+  background: #ffffff;
+  transition: all 0.15s;
+  align-self: center;
+}
+
+.retryBtn:hover {
+  background-color: #dc2626;
+  color: #ffffff;
+}
+
 .section {
   margin-bottom: 2.5rem;
   padding-bottom: 2.5rem;
   border-bottom: 1px solid #f0f0ee;
-}
-
-.section:last-of-type {
-  border-bottom: none;
 }
 
 .sectionHeader {
@@ -112,6 +197,36 @@
   line-height: 1.5;
 }
 
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.presetChip {
+  font-size: 0.8125rem;
+  color: #374151;
+  background-color: #f9fafb;
+  border: 1.5px solid #e5e7eb;
+  padding: 0.4375rem 0.875rem;
+  transition: all 0.15s;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.presetChip:hover {
+  border-color: #e8500a;
+  color: #e8500a;
+  background-color: #fff8f5;
+}
+
+.presetChipActive {
+  border-color: #e8500a;
+  background-color: #fff8f5;
+  color: #e8500a;
+}
+
 .promptInput {
   width: 100%;
   background-color: #ffffff;
@@ -123,12 +238,10 @@
   resize: vertical;
   line-height: 1.6;
   transition: border-color 0.15s, box-shadow 0.15s;
-  min-height: 90px;
+  min-height: 80px;
 }
 
-.promptInput::placeholder {
-  color: #c4c4c0;
-}
+.promptInput::placeholder { color: #c4c4c0; }
 
 .promptInput:focus {
   border-color: #1a1a1a;
@@ -149,20 +262,16 @@
 }
 
 .optionBtn {
-  padding: 0.625rem 1.25rem;
-  font-size: 0.9375rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
   font-weight: 500;
   color: #374151;
   background-color: #ffffff;
   border: 1.5px solid #e5e5e3;
   transition: all 0.15s;
-  letter-spacing: -0.01em;
 }
 
-.optionBtn:hover:not(:disabled) {
-  border-color: #1a1a1a;
-  color: #1a1a1a;
-}
+.optionBtn:hover { border-color: #1a1a1a; color: #1a1a1a; }
 
 .optionBtnActive {
   background-color: #1a1a1a;
@@ -170,15 +279,11 @@
   color: #ffffff;
 }
 
-.optionBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .layoutGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.875rem;
+  margin-bottom: 1rem;
 }
 
 .layoutBtn {
@@ -193,18 +298,11 @@
   cursor: pointer;
 }
 
-.layoutBtn:hover:not(:disabled) {
-  border-color: #1a1a1a;
-}
+.layoutBtn:hover { border-color: #1a1a1a; }
 
 .layoutBtnActive {
   border-color: #e8500a;
   background-color: #fff8f5;
-}
-
-.layoutBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .layoutPreview {
@@ -215,9 +313,7 @@
   width: 100%;
 }
 
-.layoutRect {
-  display: block;
-}
+.layoutRect { display: block; }
 
 .layoutLabel {
   font-size: 0.875rem;
@@ -233,17 +329,17 @@
   line-height: 1.4;
 }
 
-.error {
+.platformWarning {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  background-color: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #dc2626;
-  font-size: 0.8125rem;
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
   padding: 0.75rem 1rem;
-  margin-bottom: 1.5rem;
+  font-size: 0.8125rem;
+  color: #92400e;
   line-height: 1.5;
+  margin-top: 0.875rem;
 }
 
 .generateBtn {
@@ -257,26 +353,4 @@
   letter-spacing: -0.01em;
 }
 
-.generateBtn:hover:not(:disabled) {
-  background-color: #c94409;
-}
-
-.generateBtn:disabled {
-  background-color: #f3a67e;
-  cursor: not-allowed;
-}
-
-.loadingRow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.625rem;
-}
-
-.spinner {
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+.generateBtn:hover { background-color: #c94409; }
