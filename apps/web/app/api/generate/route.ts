@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 
-export const maxDuration = 800;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 const execFileAsync = promisify(execFile);
