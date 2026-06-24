@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { getBrowserClient } from "@/lib/supabase/browser";
 import styles from "./page.module.css";
 
 type InputMode = "url" | "file";
@@ -15,6 +16,7 @@ export default function LandingPage() {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
@@ -36,25 +38,13 @@ export default function LandingPage() {
     setError(null);
 
     if (mode === "url") {
-      if (!url.trim()) {
-        setError("Paste a video URL to continue.");
-        return;
-      }
-      try {
-        new URL(url.trim());
-      } catch {
-        setError("That doesn't look like a valid URL.");
-        return;
-      }
+      if (!url.trim()) { setError("Paste a video URL to continue."); return; }
+      try { new URL(url.trim()); } catch { setError("That doesn't look like a valid URL."); return; }
     }
 
-    if (mode === "file" && !file) {
-      setError("Select a video file to continue.");
-      return;
-    }
+    if (mode === "file" && !file) { setError("Select a video file to continue."); return; }
 
     setLoading(true);
-
     const sessionId = crypto.randomUUID();
 
     if (mode === "url") {
@@ -65,26 +55,26 @@ export default function LandingPage() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", file!);
-    formData.append("sessionId", sessionId);
+    // Direct upload to Supabase Storage — never touches Vercel
+    setUploadProgress("Uploading...");
+    const supabase = getBrowserClient();
+    const ext = file!.name.split(".").pop() ?? "mp4";
+    const storagePath = `${sessionId}/source.${ext}`;
 
-    const res = await fetch("/api/ingest", {
-      method: "POST",
-      body: formData,
-    });
+    const { error: uploadError } = await supabase.storage
+      .from("source-videos")
+      .upload(storagePath, file!, { contentType: file!.type, upsert: false });
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      setError(data.error ?? "Upload failed. Try again.");
+    if (uploadError) {
+      setError("Upload failed: " + uploadError.message);
       setLoading(false);
+      setUploadProgress(null);
       return;
     }
 
     sessionStorage.setItem("klipper_session", sessionId);
     sessionStorage.setItem("klipper_source_type", "file");
-    sessionStorage.setItem("klipper_storage_path", data.storagePath);
+    sessionStorage.setItem("klipper_storage_path", storagePath);
     router.push("/process");
   }
 
@@ -143,16 +133,14 @@ export default function LandingPage() {
         {mode === "file" && (
           <div
             className={styles.dropZone}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => !loading && fileInputRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
+              if (loading) return;
               const dropped = e.dataTransfer.files?.[0];
               if (dropped) {
-                const syntheticEvent = {
-                  target: { files: e.dataTransfer.files },
-                } as unknown as React.ChangeEvent<HTMLInputElement>;
-                handleFileChange(syntheticEvent);
+                handleFileChange({ target: { files: e.dataTransfer.files } } as unknown as React.ChangeEvent<HTMLInputElement>);
               }
             }}
           >
@@ -176,12 +164,11 @@ export default function LandingPage() {
                   <span className={styles.fileName}>{file.name}</span>
                   <span className={styles.fileSize}>{(file.size / 1024 / 1024).toFixed(1)} MB</span>
                 </div>
-                <button
-                  className={styles.fileRemove}
-                  onClick={(e) => { e.stopPropagation(); setFile(null); }}
-                >
-                  Remove
-                </button>
+                {!loading && (
+                  <button className={styles.fileRemove} onClick={(e) => { e.stopPropagation(); setFile(null); }}>
+                    Remove
+                  </button>
+                )}
               </div>
             ) : (
               <div className={styles.dropPrompt}>
@@ -198,9 +185,13 @@ export default function LandingPage() {
           </div>
         )}
 
+        {uploadProgress && (
+          <div className={styles.uploadProgress}>{uploadProgress}</div>
+        )}
+
         {error && (
           <div className={styles.error}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{flexShrink:0, marginTop:"1px"}}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{flexShrink:0,marginTop:"1px"}}>
               <circle cx="7" cy="7" r="6" stroke="#dc2626" strokeWidth="1.5"/>
               <path d="M7 4v4M7 10v.5" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
@@ -208,21 +199,15 @@ export default function LandingPage() {
           </div>
         )}
 
-        <button
-          className={styles.continueBtn}
-          onClick={handleContinue}
-          disabled={loading}
-        >
+        <button className={styles.continueBtn} onClick={handleContinue} disabled={loading}>
           {loading ? (
             <span className={styles.loadingRow}>
               <svg className={styles.spinner} width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10"/>
               </svg>
-              Uploading...
+              {uploadProgress ?? "Working..."}
             </span>
-          ) : (
-            "Continue"
-          )}
+          ) : "Continue"}
         </button>
 
         <p className={styles.inputNote}>
