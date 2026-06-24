@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 const execFileAsync = promisify(execFile);
 
-const COBALT_API = "https://api.cobalt.tools";
+const COBALT_API = process.env.COBALT_INSTANCE_URL ?? "https://api.cobalt.tools";
 
 const SUPPORTED_PLATFORMS = [
   "youtube.com", "youtu.be",
@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
         // Analyze
         emit({ type: "progress", percent: 50, stage: "AI is analyzing your video..." });
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+        const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
 
         const durationLabel =
           duration < 60 ? `${duration} seconds` : `${duration / 60} minutes`;
