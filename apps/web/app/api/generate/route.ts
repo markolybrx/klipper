@@ -16,25 +16,22 @@ const execFileAsync = promisify(execFile);
 
 function getFfmpegPath(): string {
   const candidates = [
+    path.join(process.cwd(), "ffmpeg-bin", "ffmpeg"),
+    "/var/task/ffmpeg-bin/ffmpeg",
     "/usr/bin/ffmpeg",
     "/usr/local/bin/ffmpeg",
-    "/opt/homebrew/bin/ffmpeg",
-    "/var/task/ffmpeg",
   ];
 
   for (const p of candidates) {
+    console.log("[klipper] Checking ffmpeg:", p, "exists:", fs.existsSync(p));
     if (fs.existsSync(p)) {
-      console.log("[klipper] ffmpeg found at:", p);
       try { fs.chmodSync(p, 0o755); } catch {}
+      console.log("[klipper] Using ffmpeg at:", p);
       return p;
     }
   }
 
-  console.log("[klipper] ffmpeg not found at any candidate path");
-  throw new Error(
-    "ffmpeg is not available in this deployment environment. " +
-    "Please upgrade to Vercel Pro or contact support."
-  );
+  throw new Error("ffmpeg binary not found in deployment. This is required for video rendering.");
 }
 
 function getCropFilter(layout: string): string {
@@ -96,6 +93,7 @@ export async function POST(request: NextRequest) {
 
       try {
         fs.mkdirSync(tmpDir, { recursive: true });
+        console.log("[klipper] tmpDir:", tmpDir);
 
         emit({ type: "progress", percent: 2, stage: "Initializing..." });
 
@@ -105,7 +103,7 @@ export async function POST(request: NextRequest) {
         } catch (e) {
           throw new Error(
             "ffmpeg is not available in this Vercel deployment. " +
-            "This feature requires Vercel Pro. Please upgrade at vercel.com/pricing."
+            "Please upgrade to Vercel Pro for full rendering support."
           );
         }
 
@@ -134,9 +132,9 @@ export async function POST(request: NextRequest) {
               });
               if (!format?.url) throw new Error("No downloadable format found.");
               await downloadToFile(format.url, sourcePath);
-            } catch (ytErr: unknown) {
+            } catch {
               throw new Error(
-                "YouTube videos are blocked by YouTube's bot detection on cloud servers. " +
+                "YouTube videos are blocked by YouTube on cloud servers. " +
                 "Download the video and upload it as a file instead."
               );
             }
@@ -293,7 +291,7 @@ Rules:
 
         emit({ type: "progress", percent: 100, stage: "Done" });
         emit({ type: "complete", clips });
-        console.log("[klipper] Complete, clips:", clips.length);
+        console.log("[klipper] Complete:", clips.length, "clips");
 
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
