@@ -17,21 +17,19 @@ const execFileAsync = promisify(execFile);
 function getFfmpegPath(): string {
   const candidates = [
     path.join(process.cwd(), "ffmpeg-bin", "ffmpeg"),
+    "/var/task/apps/web/ffmpeg-bin/ffmpeg",
     "/var/task/ffmpeg-bin/ffmpeg",
     "/usr/bin/ffmpeg",
     "/usr/local/bin/ffmpeg",
   ];
-
   for (const p of candidates) {
-    console.log("[klipper] Checking ffmpeg:", p, "exists:", fs.existsSync(p));
     if (fs.existsSync(p)) {
       try { fs.chmodSync(p, 0o755); } catch {}
       console.log("[klipper] Using ffmpeg at:", p);
       return p;
     }
   }
-
-  throw new Error("ffmpeg binary not found in deployment. This is required for video rendering.");
+  throw new Error("ffmpeg binary not found in deployment.");
 }
 
 function getCropFilter(layout: string): string {
@@ -46,15 +44,31 @@ function getCropFilter(layout: string): string {
 }
 
 async function downloadToFile(url: string, destPath: string): Promise<void> {
-  console.log("[klipper] Downloading:", url.substring(0, 80));
+  console.log("[klipper] Downloading:", url.substring(0, 100));
+
   const response = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     },
   });
+
   if (!response.ok) {
     throw new Error(`Download failed: ${response.status} ${response.statusText}`);
   }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  console.log("[klipper] Content-Type:", contentType);
+
+  const isVideo = contentType.includes("video/") || contentType.includes("application/octet-stream");
+  if (!isVideo) {
+    throw new Error(
+      `The URL did not return a video file — it returned "${contentType}". ` +
+      "This usually means the URL is a webpage, not a direct video link. " +
+      "Please paste a direct .mp4 URL or upload a file instead. " +
+      "Facebook, Instagram, and TikTok share links are not supported — use Upload File."
+    );
+  }
+
   const writeStream = fs.createWriteStream(destPath);
   const readable = Readable.fromWeb(response.body as import("stream/web").ReadableStream);
   await new Promise<void>((resolve, reject) => {
@@ -63,11 +77,12 @@ async function downloadToFile(url: string, destPath: string): Promise<void> {
     writeStream.on("error", reject);
     readable.on("error", reject);
   });
+
   const stat = fs.statSync(destPath);
-  console.log("[klipper] Downloaded size:", stat.size, "bytes");
-  if (stat.size < 1000) {
-    const preview = fs.readFileSync(destPath, "utf8").substring(0, 200);
-    throw new Error(`Downloaded file too small (${stat.size}b): ${preview}`);
+  console.log("[klipper] Downloaded:", stat.size, "bytes");
+
+  if (stat.size < 10000) {
+    throw new Error(`Downloaded file is too small (${stat.size} bytes) — likely not a valid video.`);
   }
 }
 
@@ -93,20 +108,9 @@ export async function POST(request: NextRequest) {
 
       try {
         fs.mkdirSync(tmpDir, { recursive: true });
-        console.log("[klipper] tmpDir:", tmpDir);
 
         emit({ type: "progress", percent: 2, stage: "Initializing..." });
-
-        let ffmpegBin: string;
-        try {
-          ffmpegBin = getFfmpegPath();
-        } catch (e) {
-          throw new Error(
-            "ffmpeg is not available in this Vercel deployment. " +
-            "Please upgrade to Vercel Pro for full rendering support."
-          );
-        }
-
+        const ffmpegBin = getFfmpegPath();
         const sourcePath = path.join(tmpDir, "source.mp4");
         const supabase = getAdminClient();
 
@@ -121,6 +125,15 @@ export async function POST(request: NextRequest) {
 
         } else if (sourceType === "url") {
           const isYouTube = /youtube\.com|youtu\.be/i.test(sourceUrl);
+          const isSocialShare = /facebook\.com|instagram\.com|tiktok\.com|twitter\.com|x\.com/i.test(sourceUrl);
+
+          if (isSocialShare) {
+            throw new Error(
+              "Social media share links (Facebook, Instagram, TikTok, Twitter) cannot be downloaded directly " +
+              "due to platform restrictions. Please download the video first and use Upload File instead."
+            );
+          }
+
           if (isYouTube) {
             emit({ type: "progress", percent: 10, stage: "Fetching YouTube video..." });
             try {
@@ -132,10 +145,12 @@ export async function POST(request: NextRequest) {
               });
               if (!format?.url) throw new Error("No downloadable format found.");
               await downloadToFile(format.url, sourcePath);
-            } catch {
+            } catch (ytErr: unknown) {
+              const msg = ytErr instanceof Error ? ytErr.message : "";
+              if (msg.includes("platform restrictions") || msg.includes("webpage")) throw ytErr;
               throw new Error(
-                "YouTube videos are blocked by YouTube on cloud servers. " +
-                "Download the video and upload it as a file instead."
+                "YouTube videos cannot be downloaded from cloud servers due to bot detection. " +
+                "Download the video and use Upload File instead."
               );
             }
           } else {
@@ -146,14 +161,16 @@ export async function POST(request: NextRequest) {
           throw new Error("Invalid source type.");
         }
 
+        // Upload to Gemini
         emit({ type: "progress", percent: 28, stage: "Uploading to Gemini for analysis..." });
         const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY!);
         const uploadResult = await fileManager.uploadFile(sourcePath, {
           mimeType: "video/mp4",
           displayName: `klipper-${sessionId}`,
         });
-        console.log("[klipper] Gemini upload done:", uploadResult.file.name);
+        console.log("[klipper] Gemini upload:", uploadResult.file.name);
 
+        // Poll for processing
         emit({ type: "progress", percent: 38, stage: "Gemini is processing your video..." });
         let geminiFile = await fileManager.getFile(uploadResult.file.name);
         let attempts = 0;
@@ -164,20 +181,34 @@ export async function POST(request: NextRequest) {
           geminiFile = await fileManager.getFile(uploadResult.file.name);
           attempts++;
           const pollPct = 38 + Math.round((attempts / maxAttempts) * 10);
-          emit({ type: "progress", percent: pollPct, stage: `Gemini processing... (${attempts * 5}s)` });
+          emit({
+            type: "progress",
+            percent: pollPct,
+            stage: `Gemini processing... (${attempts * 5}s)`,
+          });
           console.log("[klipper] Gemini state:", geminiFile.state, "attempt:", attempts);
+        }
+
+        if (geminiFile.state === FileState.FAILED) {
+          try { await fileManager.deleteFile(uploadResult.file.name); } catch {}
+          throw new Error(
+            "Gemini failed to process this video. The file may be corrupted, " +
+            "in an unsupported format, or too large. Try a different video or upload an MP4 file directly."
+          );
         }
 
         if (geminiFile.state !== FileState.ACTIVE) {
           try { await fileManager.deleteFile(uploadResult.file.name); } catch {}
-          throw new Error("Gemini timed out. Try a shorter video (under 5 minutes).");
+          throw new Error("Gemini timed out processing the video. Try a shorter video (under 5 minutes).");
         }
 
+        // Analyze
         emit({ type: "progress", percent: 50, stage: "AI is analyzing your video..." });
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
         const durationLabel = duration < 60 ? `${duration} seconds` : `${duration / 60} minutes`;
+
         const analysisPrompt = `You are a short-form video clip selector for social media content creators.
 
 Analyze this video and identify the 5 best moments to clip.
@@ -219,7 +250,7 @@ Rules:
 
         try {
           const parsed = JSON.parse(cleaned);
-          if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Empty");
+          if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Empty array");
           timestamps = parsed.slice(0, 5);
         } catch {
           throw new Error("AI returned an unreadable response. Please try again.");
@@ -228,12 +259,17 @@ Rules:
         try { await fileManager.deleteFile(uploadResult.file.name); } catch {}
         console.log("[klipper] Timestamps:", timestamps.length);
 
+        // Render clips
         const clips = [];
 
         for (let i = 0; i < timestamps.length; i++) {
           const ts = timestamps[i];
           const pct = 60 + Math.round((i / timestamps.length) * 32);
-          emit({ type: "progress", percent: pct, stage: `Rendering clip ${i + 1} of ${timestamps.length}...` });
+          emit({
+            type: "progress",
+            percent: pct,
+            stage: `Rendering clip ${i + 1} of ${timestamps.length}...`,
+          });
 
           const clipPath = path.join(tmpDir, `clip-${i + 1}.mp4`);
           const clipDuration = Math.max(1, Math.round(ts.end_time - ts.start_time));
@@ -254,7 +290,6 @@ Rules:
           ];
 
           await execFileAsync(ffmpegBin, ffmpegArgs);
-
           emit({ type: "progress", percent: pct + 4, stage: `Saving clip ${i + 1}...` });
 
           const clipBuffer = fs.readFileSync(clipPath);
@@ -270,7 +305,7 @@ Rules:
             .from("rendered-clips")
             .createSignedUrl(clipStoragePath, 7200);
 
-          if (signErr || !signedData) throw new Error(`Failed to generate URL for clip ${i + 1}.`);
+          if (signErr || !signedData) throw new Error(`Failed to generate download URL for clip ${i + 1}.`);
 
           try { fs.unlinkSync(clipPath); } catch {}
 
