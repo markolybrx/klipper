@@ -1,7 +1,10 @@
 {
   "functions": {
     "app/api/generate/route.ts": {
-      "includeFiles": "node_modules/@ffmpeg-installer/**"
+      "maxDuration": 300
+    },
+    "app/api/ffmpeg-check/route.ts": {
+      "maxDuration": 30
     }
   }
 }
