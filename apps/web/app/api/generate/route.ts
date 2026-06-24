@@ -261,7 +261,7 @@ export async function POST(request: NextRequest) {
             emit({ type: "progress", percent: 12, stage: "Fetching video from source platform..." });
             downloadUrl = await resolveVideoUrl(sourceUrl);
             // Cobalt tunnel URLs bypass content-type checks
-            isTunnel = downloadUrl.includes("cobalt.tools") || downloadUrl.includes("imput.net");
+            isTunnel = true; // all Cobalt-resolved URLs bypass content-type check
           }
 
           emit({ type: "progress", percent: 18, stage: "Downloading video..." });
