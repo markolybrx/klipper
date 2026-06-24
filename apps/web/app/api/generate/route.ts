@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GoogleAIFileManager, FileState } from "@google/generative-ai/server";
-import { execFile, chmodSync } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import { Readable } from "stream";
 import fs from "fs";
@@ -17,7 +17,7 @@ const execFileAsync = promisify(execFile);
 function getFfmpegPath(): string {
   const p = require("ffmpeg-static") as string | null;
   if (!p) throw new Error("ffmpeg binary not found in bundle.");
-  try { chmodSync(p, 0o755); } catch {}
+  try { fs.chmodSync(p, 0o755); } catch {}
   return p;
 }
 
