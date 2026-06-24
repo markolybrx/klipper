@@ -3,6 +3,7 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GoogleAIFileManager, FileState } from "@google/generative-ai/server";
 import { execFile } from "child_process";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { promisify } from "util";
 import { Readable } from "stream";
 import fs from "fs";
@@ -15,19 +16,19 @@ export const dynamic = "force-dynamic";
 const execFileAsync = promisify(execFile);
 
 function getFfmpegPath(): string {
-  // Try ffmpeg-static first
+  // Primary: @ffmpeg-installer/ffmpeg — designed for serverless bundling
   try {
-    const ffmpegStatic = require("ffmpeg-static") as string | null;
-    if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
-      try { fs.chmodSync(ffmpegStatic, 0o755); } catch {}
-      console.log("[klipper] ffmpeg found at:", ffmpegStatic);
-      return ffmpegStatic;
+    const installerPath = ffmpegInstaller.path;
+    if (installerPath && fs.existsSync(installerPath)) {
+      try { fs.chmodSync(installerPath, 0o755); } catch {}
+      console.log("[klipper] ffmpeg found via installer:", installerPath);
+      return installerPath;
     }
   } catch (e) {
-    console.log("[klipper] ffmpeg-static require failed:", e);
+    console.log("[klipper] @ffmpeg-installer path failed:", e);
   }
 
-  // Fallback: system ffmpeg
+  // Fallback: system ffmpeg paths
   const systemPaths = ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg"];
   for (const p of systemPaths) {
     if (fs.existsSync(p)) {
@@ -37,7 +38,7 @@ function getFfmpegPath(): string {
   }
 
   throw new Error(
-    "ffmpeg binary not found. The render pipeline requires ffmpeg to be available."
+    "ffmpeg binary not found in deployment. Upgrade to Vercel Pro for full rendering support."
   );
 }
 

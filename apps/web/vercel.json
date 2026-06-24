@@ -1,7 +1,7 @@
 {
   "functions": {
     "app/api/generate/route.ts": {
-      "includeFiles": "node_modules/ffmpeg-static/**"
+      "includeFiles": "node_modules/@ffmpeg-installer/**"
     }
   }
 }
