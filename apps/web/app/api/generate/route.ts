@@ -76,25 +76,21 @@ function getCropFilter(layout: string): string {
   }
 }
 
-async function resolveVideoUrl(sourceUrl: string): Promise<string> {
-  // Direct video file — no resolution needed
+async function resolveVideoUrl(sourceUrl: string): Promise<{ url: string; isTunnel: boolean }> {
   if (isDirectVideoUrl(sourceUrl)) {
-    console.log("[klipper] Direct video URL detected");
-    return sourceUrl;
+    console.log("[klipper] Direct video URL");
+    return { url: sourceUrl, isTunnel: false };
   }
 
   const platform = detectPlatform(sourceUrl);
-
   if (!platform) {
     throw new Error(
-      "Unrecognized URL. Paste a direct video URL (.mp4) or a link from " +
-      "YouTube, TikTok, Instagram, Facebook, or Twitter."
+      "Unrecognized URL. Paste a direct .mp4 URL or a link from YouTube, TikTok, Instagram, Facebook, or Twitter."
     );
   }
 
   console.log("[klipper] Resolving via Cobalt API, platform:", platform);
 
-  // Call Cobalt API
   const cobaltRes = await fetch(`${COBALT_API}/`, {
     method: "POST",
     headers: {
@@ -112,10 +108,9 @@ async function resolveVideoUrl(sourceUrl: string): Promise<string> {
 
   if (!cobaltRes.ok) {
     const errText = await cobaltRes.text().catch(() => "");
-    console.log("[klipper] Cobalt API error:", cobaltRes.status, errText.substring(0, 200));
+    console.log("[klipper] Cobalt error:", cobaltRes.status, errText.substring(0, 200));
     throw new Error(
-      `Could not fetch video from ${platform} (Cobalt error ${cobaltRes.status}). ` +
-      "Try uploading the video as a file instead."
+      `Could not fetch video from ${platform} (status ${cobaltRes.status}). Try uploading the video as a file instead.`
     );
   }
 
@@ -124,66 +119,80 @@ async function resolveVideoUrl(sourceUrl: string): Promise<string> {
 
   if (cobaltData.status === "error") {
     throw new Error(
-      `Could not download this ${platform} video: ${cobaltData.error?.code ?? "unknown error"}. ` +
-      "The video may be private, age-restricted, or unavailable. Try uploading as a file."
+      `Could not download this ${platform} video: ${cobaltData.error?.code ?? "unknown"}. ` +
+      "The video may be private or unavailable. Try uploading as a file."
     );
   }
 
   if (cobaltData.status === "picker") {
-    // Multiple streams available — pick the first video
     const videoItem = cobaltData.picker?.find(
       (item: { type: string; url: string }) => item.type === "video"
     );
-    if (videoItem?.url) {
-      console.log("[klipper] Cobalt picker — using first video item");
-      return videoItem.url;
-    }
-    throw new Error("Could not select a video stream from this URL. Try uploading as a file.");
+    if (videoItem?.url) return { url: videoItem.url, isTunnel: true };
+    throw new Error("Could not select a video stream. Try uploading as a file.");
   }
 
   if (cobaltData.status === "redirect" || cobaltData.status === "tunnel") {
-    if (!cobaltData.url) {
-      throw new Error("Cobalt returned no download URL. Try uploading the video as a file.");
-    }
+    if (!cobaltData.url) throw new Error("Cobalt returned no download URL.");
     console.log("[klipper] Cobalt resolved URL:", cobaltData.url.substring(0, 80));
-    return cobaltData.url;
+    return { url: cobaltData.url, isTunnel: true };
   }
 
-  throw new Error(
-    `Unexpected response from video resolver: ${cobaltData.status}. ` +
-    "Try uploading the video as a file."
-  );
+  throw new Error(`Unexpected Cobalt response: ${cobaltData.status}. Try uploading as a file.`);
 }
 
-async function downloadToFile(url: string, destPath: string, isCobaltTunnel = false): Promise<void> {
+async function downloadToFile(
+  url: string,
+  destPath: string,
+  isTunnel = false
+): Promise<void> {
   console.log("[klipper] Downloading:", url.substring(0, 100));
 
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    },
-  });
+  const headers: Record<string, string> = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "identity",
+    "Connection": "keep-alive",
+  };
 
-  if (!response.ok) {
-    throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+  if (isTunnel) {
+    headers["Range"] = "bytes=0-";
+    headers["Referer"] = "https://cobalt.tools/";
+    headers["Origin"] = "https://cobalt.tools";
   }
 
-  const contentType = response.headers.get("content-type") ?? "";
-  console.log("[klipper] Content-Type:", contentType);
+  const response = await fetch(url, { headers });
 
-  // Cobalt tunnel URLs serve video without a video/* content-type sometimes
-  if (!isCobaltTunnel) {
+  console.log("[klipper] Response status:", response.status);
+  const contentType = response.headers.get("content-type") ?? "";
+  const contentLength = response.headers.get("content-length") ?? "unknown";
+  console.log("[klipper] Content-Type:", contentType, "| Content-Length:", contentLength);
+
+  if (!response.ok && response.status !== 206) {
+    const body = await response.text().catch(() => "");
+    console.log("[klipper] Error body:", body.substring(0, 300));
+    throw new Error(
+      `Download failed with status ${response.status}. ` +
+      "Try uploading the video as a file instead."
+    );
+  }
+
+  if (!isTunnel) {
     const isVideo =
       contentType.includes("video/") ||
       contentType.includes("application/octet-stream") ||
       contentType.includes("binary/octet-stream");
     if (!isVideo) {
       throw new Error(
-        `The URL returned "${contentType}" instead of a video. ` +
-        "This URL may be a webpage, not a direct video link. " +
+        `The URL returned "${contentType}" instead of a video file. ` +
         "Try using a direct .mp4 URL or upload a file."
       );
     }
+  }
+
+  if (!response.body) {
+    throw new Error("Response body is null — video stream could not be opened.");
   }
 
   const writeStream = fs.createWriteStream(destPath);
@@ -202,7 +211,7 @@ async function downloadToFile(url: string, destPath: string, isCobaltTunnel = fa
   if (stat.size < 10000) {
     throw new Error(
       `Downloaded file is too small (${stat.size} bytes). ` +
-      "The video may be unavailable. Try uploading as a file."
+      "The platform may have blocked this request. Try uploading the video as a file instead."
     );
   }
 }
@@ -247,31 +256,18 @@ export async function POST(request: NextRequest) {
             .from("source-videos")
             .createSignedUrl(storagePath, 300);
           if (signErr || !signedData) throw new Error("Could not access uploaded file.");
-          await downloadToFile(signedData.signedUrl, sourcePath);
+          await downloadToFile(signedData.signedUrl, sourcePath, false);
 
         } else if (sourceType === "url") {
           emit({ type: "progress", percent: 8, stage: "Resolving video URL..." });
-
-          let downloadUrl: string;
-          let isTunnel = false;
-
-          if (isDirectVideoUrl(sourceUrl)) {
-            downloadUrl = sourceUrl;
-          } else {
-            emit({ type: "progress", percent: 12, stage: "Fetching video from source platform..." });
-            downloadUrl = await resolveVideoUrl(sourceUrl);
-            // Cobalt tunnel URLs bypass content-type checks
-            isTunnel = true; // all Cobalt-resolved URLs bypass content-type check
-          }
-
+          const resolved = await resolveVideoUrl(sourceUrl);
           emit({ type: "progress", percent: 18, stage: "Downloading video..." });
-          await downloadToFile(downloadUrl, sourcePath, isTunnel);
+          await downloadToFile(resolved.url, sourcePath, resolved.isTunnel);
 
         } else {
           throw new Error("Invalid source type.");
         }
 
-        // Upload to Gemini
         emit({ type: "progress", percent: 28, stage: "Uploading to Gemini for analysis..." });
         const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY!);
         const uploadResult = await fileManager.uploadFile(sourcePath, {
@@ -280,7 +276,6 @@ export async function POST(request: NextRequest) {
         });
         console.log("[klipper] Gemini upload:", uploadResult.file.name);
 
-        // Poll Gemini processing
         emit({ type: "progress", percent: 38, stage: "Gemini is processing your video..." });
         let geminiFile = await fileManager.getFile(uploadResult.file.name);
         let attempts = 0;
@@ -303,26 +298,22 @@ export async function POST(request: NextRequest) {
           try { await fileManager.deleteFile(uploadResult.file.name); } catch {}
           throw new Error(
             "Gemini failed to process this video. " +
-            "The file may be corrupted or in an unsupported format. " +
             "Try uploading an MP4 file directly."
           );
         }
 
         if (geminiFile.state !== FileState.ACTIVE) {
           try { await fileManager.deleteFile(uploadResult.file.name); } catch {}
-          throw new Error(
-            "Gemini timed out processing the video. " +
-            "Try a shorter video (under 5 minutes works best)."
-          );
+          throw new Error("Gemini timed out. Try a shorter video (under 5 minutes).");
         }
 
-        // Analyze
         emit({ type: "progress", percent: 50, stage: "AI is analyzing your video..." });
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
         const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
 
-        const durationLabel =
-          duration < 60 ? `${duration} seconds` : `${duration / 60} minutes`;
+        const durationLabel = duration < 60
+          ? `${duration} seconds`
+          : `${duration / 60} minutes`;
 
         const analysisPrompt = `You are a short-form video clip selector for social media content creators.
 
@@ -368,7 +359,7 @@ Rules:
 
         try {
           const parsed = JSON.parse(cleaned);
-          if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Empty array");
+          if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Empty");
           timestamps = parsed.slice(0, 5);
         } catch {
           throw new Error("AI returned an unreadable response. Please try again.");
@@ -377,7 +368,6 @@ Rules:
         try { await fileManager.deleteFile(uploadResult.file.name); } catch {}
         console.log("[klipper] Timestamps:", timestamps.length);
 
-        // Render clips
         const clips = [];
 
         for (let i = 0; i < timestamps.length; i++) {
@@ -415,22 +405,15 @@ Rules:
 
           const { error: uploadErr } = await supabase.storage
             .from("rendered-clips")
-            .upload(clipStoragePath, clipBuffer, {
-              contentType: "video/mp4",
-              upsert: true,
-            });
+            .upload(clipStoragePath, clipBuffer, { contentType: "video/mp4", upsert: true });
 
-          if (uploadErr) {
-            throw new Error(`Failed to save clip ${i + 1}: ${uploadErr.message}`);
-          }
+          if (uploadErr) throw new Error(`Failed to save clip ${i + 1}: ${uploadErr.message}`);
 
           const { data: signedData, error: signErr } = await supabase.storage
             .from("rendered-clips")
             .createSignedUrl(clipStoragePath, 7200);
 
-          if (signErr || !signedData) {
-            throw new Error(`Failed to generate download URL for clip ${i + 1}.`);
-          }
+          if (signErr || !signedData) throw new Error(`Failed to get download URL for clip ${i + 1}.`);
 
           try { fs.unlinkSync(clipPath); } catch {}
 
@@ -454,8 +437,7 @@ Rules:
         console.log("[klipper] Complete:", clips.length, "clips");
 
       } catch (err: unknown) {
-        const msg =
-          err instanceof Error ? err.message : "An unexpected error occurred.";
+        const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
         console.log("[klipper] Error:", msg);
         try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
         emit({ type: "error", message: msg });
