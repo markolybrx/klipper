@@ -21,8 +21,8 @@ export default function LandingPage() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
     if (!selected) return;
-    if (selected.size > 200 * 1024 * 1024) {
-      setError("File exceeds the 200MB limit.");
+    if (selected.size > 500 * 1024 * 1024) {
+      setError("File exceeds the 500MB limit.");
       return;
     }
     const allowed = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"];
@@ -55,7 +55,6 @@ export default function LandingPage() {
       return;
     }
 
-    // Direct upload to Supabase Storage — never touches Vercel
     setUploadProgress("Uploading...");
     const supabase = getBrowserClient();
     const ext = file!.name.split(".").pop() ?? "mp4";
@@ -93,7 +92,7 @@ export default function LandingPage() {
           Turn any video into<br />5 ready-to-post clips.
         </h1>
         <p className={styles.heroSubtitle}>
-          Paste a public URL or upload a file. Klipper finds your best moments,
+          Paste a public URL or upload a file. Klippie finds your best moments,
           cuts them for TikTok, Reels, or Shorts, and hands them back in seconds.
           No account. No watermark.
         </p>
@@ -120,7 +119,7 @@ export default function LandingPage() {
             <input
               type="url"
               className={styles.urlInput}
-              placeholder="https://youtube.com/watch?v=... or any public video URL"
+              placeholder="YouTube, TikTok, Instagram, Facebook, Twitter or any direct video URL"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleContinue()}
@@ -179,7 +178,7 @@ export default function LandingPage() {
                   </svg>
                 </div>
                 <span className={styles.dropText}>Drag a video here or click to browse</span>
-                <span className={styles.dropHint}>MP4, MOV, WEBM, AVI — max 200MB</span>
+                <span className={styles.dropHint}>MP4, MOV, WEBM, AVI — max 500MB</span>
               </div>
             )}
           </div>
@@ -218,9 +217,9 @@ export default function LandingPage() {
       <section className={styles.features}>
         <div className={styles.feature}>
           <div className={styles.featureNum}>01</div>
-          <h3 className={styles.featureTitle}>AI finds your hooks</h3>
+          <h3 className={styles.featureTitle}>Klippie finds your hooks</h3>
           <p className={styles.featureDesc}>
-            Gemini reads the transcript and pacing to surface your most
+            Our AI reads the transcript and pacing to surface your most
             watchable moments — ranked by hook score.
           </p>
         </div>

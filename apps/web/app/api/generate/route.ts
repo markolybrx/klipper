@@ -318,7 +318,7 @@ export async function POST(request: NextRequest) {
           throw new Error("Invalid source type.");
         }
 
-        emit({ type: "progress", percent: 28, stage: "Uploading to Gemini for analysis..." });
+        emit({ type: "progress", percent: 28, stage: "Sending video to Klippie for analysis..." });
         const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY!);
         const uploadResult = await fileManager.uploadFile(sourcePath, {
           mimeType: "video/mp4",
@@ -326,7 +326,7 @@ export async function POST(request: NextRequest) {
         });
         console.log("[klipper] Gemini upload:", uploadResult.file.name);
 
-        emit({ type: "progress", percent: 38, stage: "Gemini is processing your video..." });
+        emit({ type: "progress", percent: 38, stage: "Klippie is processing your video..." });
         let geminiFile = await fileManager.getFile(uploadResult.file.name);
         let attempts = 0;
         const maxAttempts = 18;
@@ -339,7 +339,7 @@ export async function POST(request: NextRequest) {
           emit({
             type: "progress",
             percent: pollPct,
-            stage: `Gemini processing... (${attempts * 5}s)`,
+            stage: `Klippie processing... (${attempts * 5}s)`,
           });
           console.log("[klipper] Gemini state:", geminiFile.state, "attempt:", attempts);
         }
@@ -347,16 +347,16 @@ export async function POST(request: NextRequest) {
         if (geminiFile.state === FileState.FAILED) {
           try { await fileManager.deleteFile(uploadResult.file.name); } catch {}
           throw new Error(
-            "Gemini failed to process this video. Try uploading an MP4 file directly."
+            "Klippie failed to process this video. Try uploading an MP4 file directly."
           );
         }
 
         if (geminiFile.state !== FileState.ACTIVE) {
           try { await fileManager.deleteFile(uploadResult.file.name); } catch {}
-          throw new Error("Gemini timed out. Try a shorter video (under 5 minutes).");
+          throw new Error("Klippie timed out. Try a shorter video (under 5 minutes).");
         }
 
-        emit({ type: "progress", percent: 50, stage: "AI is analyzing your video..." });
+        emit({ type: "progress", percent: 50, stage: "Klippie is analyzing your video..." });
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
         const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
 
