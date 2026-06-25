@@ -161,7 +161,7 @@ async function resolveVideoUrl(sourceUrl: string): Promise<{ url: string; isTunn
       videoQuality: "720",
       audioFormat: "mp3",
       filenameStyle: "basic",
-      downloadMode: "mute",
+      downloadMode: "redirect",
     }),
   });
 
