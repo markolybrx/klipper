@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GoogleAIFileManager, FileState } from "@google/generative-ai/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { Readable } from "stream";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -243,7 +244,6 @@ async function downloadVideoToFile(
 
     if (!response.body) throw new Error("Empty response body.");
 
-    const { Readable } = await import("stream");
     const writeStream = fs.createWriteStream(destPath);
     const readable = Readable.fromWeb(response.body as import("stream/web").ReadableStream);
 
