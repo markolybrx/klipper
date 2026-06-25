@@ -4,10 +4,11 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GoogleAIFileManager, FileState } from "@google/generative-ai/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { Readable } from "stream";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import https from "https";
+import http from "http";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -76,9 +77,67 @@ function getCropFilter(layout: string): string {
   }
 }
 
+// Use Node's native http/https to download — handles chunked transfer correctly
+// where fetch API fails in Vercel serverless context
+function downloadWithNode(url: string, destPath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const client = parsedUrl.protocol === "https:" ? https : http;
+    const writeStream = fs.createWriteStream(destPath);
+
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (parsedUrl.protocol === "https:" ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "identity",
+        "Range": "bytes=0-",
+        "Referer": "https://cobalt.tools/",
+        "Origin": "https://cobalt.tools",
+        "Connection": "keep-alive",
+      },
+    };
+
+    const req = client.request(options, (res) => {
+      console.log("[klipper] Node HTTP status:", res.statusCode);
+      console.log("[klipper] Node HTTP headers:", JSON.stringify({
+        "content-type": res.headers["content-type"],
+        "content-length": res.headers["content-length"],
+        "transfer-encoding": res.headers["transfer-encoding"],
+      }));
+
+      if (res.statusCode && res.statusCode >= 400) {
+        reject(new Error(`HTTP ${res.statusCode} downloading video`));
+        return;
+      }
+
+      res.pipe(writeStream);
+
+      writeStream.on("finish", () => {
+        const size = fs.statSync(destPath).size;
+        console.log("[klipper] Node download complete:", size, "bytes");
+        resolve(size);
+      });
+
+      writeStream.on("error", reject);
+      res.on("error", reject);
+    });
+
+    req.on("error", reject);
+    req.setTimeout(60000, () => {
+      req.destroy();
+      reject(new Error("Download timed out after 60 seconds"));
+    });
+    req.end();
+  });
+}
+
 async function resolveVideoUrl(sourceUrl: string): Promise<{ url: string; isTunnel: boolean }> {
   if (isDirectVideoUrl(sourceUrl)) {
-    console.log("[klipper] Direct video URL");
     return { url: sourceUrl, isTunnel: false };
   }
 
@@ -89,7 +148,7 @@ async function resolveVideoUrl(sourceUrl: string): Promise<{ url: string; isTunn
     );
   }
 
-  console.log("[klipper] Resolving via Cobalt API, platform:", platform);
+  console.log("[klipper] Resolving via Cobalt, platform:", platform);
 
   const cobaltRes = await fetch(`${COBALT_API}/`, {
     method: "POST",
@@ -110,17 +169,17 @@ async function resolveVideoUrl(sourceUrl: string): Promise<{ url: string; isTunn
     const errText = await cobaltRes.text().catch(() => "");
     console.log("[klipper] Cobalt error:", cobaltRes.status, errText.substring(0, 200));
     throw new Error(
-      `Could not fetch video from ${platform} (status ${cobaltRes.status}). Try uploading the video as a file instead.`
+      `Could not fetch video from ${platform} (status ${cobaltRes.status}). Try uploading as a file.`
     );
   }
 
   const cobaltData = await cobaltRes.json();
-  console.log("[klipper] Cobalt response status:", cobaltData.status);
+  console.log("[klipper] Cobalt status:", cobaltData.status);
 
   if (cobaltData.status === "error") {
     throw new Error(
-      `Could not download this ${platform} video: ${cobaltData.error?.code ?? "unknown"}. ` +
-      "The video may be private or unavailable. Try uploading as a file."
+      `Could not download from ${platform}: ${cobaltData.error?.code ?? "unknown"}. ` +
+      "The video may be private or unavailable."
     );
   }
 
@@ -134,83 +193,76 @@ async function resolveVideoUrl(sourceUrl: string): Promise<{ url: string; isTunn
 
   if (cobaltData.status === "redirect" || cobaltData.status === "tunnel") {
     if (!cobaltData.url) throw new Error("Cobalt returned no download URL.");
-    console.log("[klipper] Cobalt resolved URL:", cobaltData.url.substring(0, 80));
-    return { url: cobaltData.url, isTunnel: true };
+    console.log("[klipper] Cobalt URL:", cobaltData.url.substring(0, 80));
+    return {
+      url: cobaltData.url,
+      isTunnel: cobaltData.status === "tunnel",
+    };
   }
 
-  throw new Error(`Unexpected Cobalt response: ${cobaltData.status}. Try uploading as a file.`);
+  throw new Error(`Unexpected Cobalt response: ${cobaltData.status}`);
 }
 
-async function downloadToFile(
+async function downloadVideoToFile(
   url: string,
   destPath: string,
-  isTunnel = false
+  isTunnel: boolean
 ): Promise<void> {
-  console.log("[klipper] Downloading:", url.substring(0, 100));
+  console.log("[klipper] Downloading video, isTunnel:", isTunnel, "url:", url.substring(0, 80));
 
-  const headers: Record<string, string> = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "identity",
-    "Connection": "keep-alive",
-  };
+  let size: number;
 
   if (isTunnel) {
-    headers["Range"] = "bytes=0-";
-    headers["Referer"] = "https://cobalt.tools/";
-    headers["Origin"] = "https://cobalt.tools";
-  }
+    // Use Node native HTTP for tunnel URLs — fetch API strips body in Vercel
+    size = await downloadWithNode(url, destPath);
+  } else {
+    // Direct video URL — use fetch
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "*/*",
+      },
+    });
 
-  const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+    }
 
-  console.log("[klipper] Response status:", response.status);
-  const contentType = response.headers.get("content-type") ?? "";
-  const contentLength = response.headers.get("content-length") ?? "unknown";
-  console.log("[klipper] Content-Type:", contentType, "| Content-Length:", contentLength);
+    const contentType = response.headers.get("content-type") ?? "";
+    console.log("[klipper] Content-Type:", contentType);
 
-  if (!response.ok && response.status !== 206) {
-    const body = await response.text().catch(() => "");
-    console.log("[klipper] Error body:", body.substring(0, 300));
-    throw new Error(
-      `Download failed with status ${response.status}. ` +
-      "Try uploading the video as a file instead."
-    );
-  }
-
-  if (!isTunnel) {
     const isVideo =
       contentType.includes("video/") ||
       contentType.includes("application/octet-stream") ||
       contentType.includes("binary/octet-stream");
+
     if (!isVideo) {
       throw new Error(
-        `The URL returned "${contentType}" instead of a video file. ` +
+        `The URL returned "${contentType}" instead of a video. ` +
         "Try using a direct .mp4 URL or upload a file."
       );
     }
+
+    if (!response.body) throw new Error("Empty response body.");
+
+    const { Readable } = await import("stream");
+    const writeStream = fs.createWriteStream(destPath);
+    const readable = Readable.fromWeb(response.body as import("stream/web").ReadableStream);
+
+    await new Promise<void>((resolve, reject) => {
+      readable.pipe(writeStream);
+      writeStream.on("finish", resolve);
+      writeStream.on("error", reject);
+      readable.on("error", reject);
+    });
+
+    size = fs.statSync(destPath).size;
+    console.log("[klipper] Downloaded:", size, "bytes");
   }
 
-  if (!response.body) {
-    throw new Error("Response body is null — video stream could not be opened.");
-  }
-
-  const writeStream = fs.createWriteStream(destPath);
-  const readable = Readable.fromWeb(response.body as import("stream/web").ReadableStream);
-
-  await new Promise<void>((resolve, reject) => {
-    readable.pipe(writeStream);
-    writeStream.on("finish", resolve);
-    writeStream.on("error", reject);
-    readable.on("error", reject);
-  });
-
-  const stat = fs.statSync(destPath);
-  console.log("[klipper] Downloaded:", stat.size, "bytes");
-
-  if (stat.size < 10000) {
+  if (size < 10000) {
     throw new Error(
-      `Downloaded file is too small (${stat.size} bytes). ` +
+      `Downloaded file is too small (${size} bytes). ` +
       "The platform may have blocked this request. Try uploading the video as a file instead."
     );
   }
@@ -256,13 +308,13 @@ export async function POST(request: NextRequest) {
             .from("source-videos")
             .createSignedUrl(storagePath, 300);
           if (signErr || !signedData) throw new Error("Could not access uploaded file.");
-          await downloadToFile(signedData.signedUrl, sourcePath, false);
+          await downloadVideoToFile(signedData.signedUrl, sourcePath, false);
 
         } else if (sourceType === "url") {
           emit({ type: "progress", percent: 8, stage: "Resolving video URL..." });
           const resolved = await resolveVideoUrl(sourceUrl);
           emit({ type: "progress", percent: 18, stage: "Downloading video..." });
-          await downloadToFile(resolved.url, sourcePath, resolved.isTunnel);
+          await downloadVideoToFile(resolved.url, sourcePath, resolved.isTunnel);
 
         } else {
           throw new Error("Invalid source type.");
@@ -297,8 +349,7 @@ export async function POST(request: NextRequest) {
         if (geminiFile.state === FileState.FAILED) {
           try { await fileManager.deleteFile(uploadResult.file.name); } catch {}
           throw new Error(
-            "Gemini failed to process this video. " +
-            "Try uploading an MP4 file directly."
+            "Gemini failed to process this video. Try uploading an MP4 file directly."
           );
         }
 
@@ -413,7 +464,7 @@ Rules:
             .from("rendered-clips")
             .createSignedUrl(clipStoragePath, 7200);
 
-          if (signErr || !signedData) throw new Error(`Failed to get download URL for clip ${i + 1}.`);
+          if (signErr || !signedData) throw new Error(`Failed to get URL for clip ${i + 1}.`);
 
           try { fs.unlinkSync(clipPath); } catch {}
 
