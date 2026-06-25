@@ -151,6 +151,11 @@ async function resolveVideoUrl(sourceUrl: string): Promise<{ url: string; isTunn
 
   console.log("[klipper] Resolving via Cobalt, platform:", platform);
 
+  // Wake up Render free instance before the actual request
+  try {
+    await fetch(COBALT_API + "/", { method: "GET", signal: AbortSignal.timeout(8000) });
+  } catch {} // ignore — just waking the instance
+
   const cobaltRes = await fetch(`${COBALT_API}/`, {
     method: "POST",
     headers: {
