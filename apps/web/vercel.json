@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "app/api/generate/route.ts": {
+      "maxDuration": 300,
+      "includeFiles": "ffmpeg-bin/ffmpeg"
+    },
+    "app/api/ffmpeg-check/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}
