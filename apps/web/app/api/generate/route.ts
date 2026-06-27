@@ -178,7 +178,7 @@ async function resolveVideoUrl(sourceUrl: string): Promise<{ url: string; isTunn
     const errText = await cobaltRes.text().catch(() => "");
     console.log("[klipper] Cobalt error:", cobaltRes.status, errText.substring(0, 200));
     throw new Error(
-      `Could not fetch video from ${platform} (status ${cobaltRes.status}). Try uploading as a file.`
+      `Could not download from ${platform}. ${platform.includes("youtube") || platform.includes("youtu") ? "YouTube requires authentication on cloud servers. Download the video to your phone first, then use Upload File above." : "Try uploading the video as a file instead."}`
     );
   }
 

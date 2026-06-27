@@ -119,7 +119,7 @@ export default function LandingPage() {
             <input
               type="url"
               className={styles.urlInput}
-              placeholder="YouTube, TikTok, Instagram, Facebook, Twitter or any direct video URL"
+              placeholder="TikTok, Instagram, Facebook, Twitter or any direct video URL (YouTube: upload file instead)"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleContinue()}
